@@ -24,14 +24,14 @@ set(ESP_OPENTELEMETRY_SRCS
     src/workarounds/esp_heap_align.cpp
 )
 
-# The OTLP/HTTP exporters and the esp_http_client transport behind them are
-# only compiled when that exporter family is selected; their headers come from
-# the SDK's OTLP/HTTP targets, which are not on the include path otherwise.
-if(CONFIG_ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP AND (CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED
-   OR CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED OR CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED))
-    list(APPEND ESP_OPENTELEMETRY_SRCS
-        src/integration/esp_http_client_transport.cpp
-        src/integration/esp_otlp_http_exporters.cpp)
+# The OTLP/HTTP factories exist whenever that exporter family is selected. The
+# esp_http_client transport behind the SDK exporters needs the SDK's OTLP/HTTP
+# targets for its headers, so it is compiled only when a signal builds them.
+if(CONFIG_ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP)
+    list(APPEND ESP_OPENTELEMETRY_SRCS src/integration/esp_otlp_http_exporters.cpp)
+    if(CONFIG_ESP_OPENTELEMETRY_SDK_ENABLED)
+        list(APPEND ESP_OPENTELEMETRY_SRCS src/integration/esp_http_client_transport.cpp)
+    endif()
 endif()
 
 # The JTAG sources reference esp_apptrace unconditionally; the app-trace
@@ -65,10 +65,8 @@ else()
     list(APPEND ESP_OPENTELEMETRY_SRCS src/integration/esp_profiling_stub.cpp)
 endif()
 
-# The ProfilesExporter factories are transports for a JSON document and do not
-# depend on the sampler, so they follow the exporter families rather than
-# CONFIG_ESP_OPENTELEMETRY_PROFILING_ENABLED: firmware with profiling off can
-# still name one without failing to link.
+# Built in every configuration so firmware with profiling off can still name
+# MakeOstreamProfilesExporter() without failing to link.
 list(APPEND ESP_OPENTELEMETRY_SRCS src/integration/esp_profiles_exporter.cpp)
 
 # The opentelemetry-cpp api/ tree is header-only and compiles without the
@@ -143,8 +141,7 @@ idf_build_set_property(LINK_OPTIONS "-Wl,--undefined=_Znwj" APPEND)
 idf_build_set_property(LINK_OPTIONS "-Wl,--defsym=__start_pb_defaults=0" APPEND)
 idf_build_set_property(LINK_OPTIONS "-Wl,--defsym=__stop_pb_defaults=0" APPEND)
 
-if(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED OR CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED
-   OR CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED)
+if(CONFIG_ESP_OPENTELEMETRY_SDK_ENABLED)
     # opentelemetry-cpp's architecture autodetection does not understand
     # Xtensa; short-circuit it by exporting ARCH to the value it uses for
     # debug logging only. The SDK's actual codegen does not depend on this
