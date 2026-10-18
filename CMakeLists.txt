@@ -219,7 +219,7 @@ if(CONFIG_ESP_OPENTELEMETRY_SDK_ENABLED)
     )
 
     # The SDK validates instrument names and units with std::regex, whose
-    # matcher recurses per character and overflows small task stacks (#141).
+    # matcher recurses per character and overflows small task stacks (issue #141).
     get_target_property(_esp_otel_metrics_sources opentelemetry_metrics SOURCES)
     if(NOT "instrument_metadata_validator.cc" IN_LIST _esp_otel_metrics_sources)
         message(FATAL_ERROR "opentelemetry_metrics no longer lists "

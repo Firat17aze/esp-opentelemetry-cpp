@@ -48,23 +48,35 @@ class CollectingReader : public metrics_sdk::MetricReader {
   bool OnShutDown(std::chrono::microseconds /*timeout*/) noexcept override { return true; }
 };
 
+bool ContainsMetricNamed(const metrics_sdk::ResourceMetrics &metrics, const std::string &name) {
+  for (const auto &scope : metrics.scope_metric_data_) {
+    for (const auto &metric : scope.metric_data_) {
+      if (metric.instrument_descriptor.name_ == name) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 bool HasMetricNamed(CollectingReader &reader, const std::string &name) {
   bool found = false;
   reader.Collect([&](metrics_sdk::ResourceMetrics &metrics) {
-    for (const auto &scope : metrics.scope_metric_data_) {
-      for (const auto &metric : scope.metric_data_) {
-        found = found || metric.instrument_descriptor.name_ == name;
-      }
-    }
+    found = ContainsMetricNamed(metrics, name);
     return true;
   });
   return found;
 }
 
-bool IsRecorded(const std::string &name, const std::string &unit) {
+std::shared_ptr<CollectingReader> AddCollectingReader(metrics_sdk::MeterProvider &provider) {
   auto reader = std::make_shared<CollectingReader>();
-  metrics_sdk::MeterProvider provider;
   provider.AddMetricReader(reader);
+  return reader;
+}
+
+bool IsAccepted(const std::string &name, const std::string &unit) {
+  metrics_sdk::MeterProvider provider;
+  auto reader = AddCollectingReader(provider);
   provider.GetMeter("test")->CreateUInt64Counter(name, "", unit)->Add(1);
   return HasMetricNamed(*reader, name);
 }
@@ -98,54 +110,53 @@ void test_max_length_counter_leaves_stack_headroom_on_a_4_kb_task() {
 }
 
 void test_max_length_counter_created_on_a_4_kb_task_is_recorded() {
-  auto reader = std::make_shared<CollectingReader>();
   metrics_sdk::MeterProvider provider;
-  provider.AddMetricReader(reader);
+  auto reader = AddCollectingReader(provider);
   SmallStackCreation creation{provider.GetMeter("test"), xTaskGetCurrentTaskHandle(), nullptr, 0};
   CreateMaxLengthCounterOnSmallStack(creation);
   creation.counter->Add(1);
   TEST_ASSERT_TRUE(HasMetricNamed(*reader, kMaxLengthName));
 }
 
-void test_single_letter_name_is_accepted() { TEST_ASSERT_TRUE(IsRecorded("a", "")); }
+void test_single_letter_name_is_accepted() { TEST_ASSERT_TRUE(IsAccepted("a", "")); }
 
 void test_name_with_every_allowed_punctuation_and_digit_is_accepted() {
-  TEST_ASSERT_TRUE(IsRecorded("Az-_./09", ""));
+  TEST_ASSERT_TRUE(IsAccepted("Az-_./09", ""));
 }
 
-void test_empty_name_is_rejected() { TEST_ASSERT_FALSE(IsRecorded("", "")); }
+void test_empty_name_is_rejected() { TEST_ASSERT_FALSE(IsAccepted("", "")); }
 
 void test_name_longer_than_255_chars_is_rejected() {
-  TEST_ASSERT_FALSE(IsRecorded(kMaxLengthName + "a", ""));
+  TEST_ASSERT_FALSE(IsAccepted(kMaxLengthName + "a", ""));
 }
 
-void test_name_starting_with_a_digit_is_rejected() { TEST_ASSERT_FALSE(IsRecorded("1a", "")); }
+void test_name_starting_with_a_digit_is_rejected() { TEST_ASSERT_FALSE(IsAccepted("1a", "")); }
 
 void test_name_starting_with_an_underscore_is_rejected() {
-  TEST_ASSERT_FALSE(IsRecorded("_a", ""));
+  TEST_ASSERT_FALSE(IsAccepted("_a", ""));
 }
 
-void test_name_with_a_space_is_rejected() { TEST_ASSERT_FALSE(IsRecorded("a b", "")); }
+void test_name_with_a_space_is_rejected() { TEST_ASSERT_FALSE(IsAccepted("a b", "")); }
 
 void test_name_with_a_non_ascii_letter_is_rejected() {
-  TEST_ASSERT_FALSE(IsRecorded("a\xC3\xA9", ""));
+  TEST_ASSERT_FALSE(IsAccepted("a\xC3\xA9", ""));
 }
 
 void test_name_with_an_embedded_nul_is_rejected() {
-  TEST_ASSERT_FALSE(IsRecorded(std::string("a\0b", 3), ""));
+  TEST_ASSERT_FALSE(IsAccepted(std::string("a\0b", 3), ""));
 }
 
 void test_unit_longer_than_63_chars_is_rejected() {
-  TEST_ASSERT_FALSE(IsRecorded("a", kMaxLengthUnit + "u"));
+  TEST_ASSERT_FALSE(IsAccepted("a", kMaxLengthUnit + "u"));
 }
 
 void test_unit_with_a_non_ascii_char_is_rejected() {
-  TEST_ASSERT_FALSE(IsRecorded("a", "\xC2\xB0"
+  TEST_ASSERT_FALSE(IsAccepted("a", "\xC2\xB0"
                                     "C"));
 }
 
 void test_unit_with_an_embedded_nul_is_rejected() {
-  TEST_ASSERT_FALSE(IsRecorded("a", std::string("m\0s", 3)));
+  TEST_ASSERT_FALSE(IsAccepted("a", std::string("m\0s", 3)));
 }
 
 }  // namespace

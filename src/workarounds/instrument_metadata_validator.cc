@@ -1,3 +1,6 @@
+// Copyright The OpenTelemetry Authors
+// SPDX-License-Identifier: Apache-2.0
+
 // Replaces opentelemetry-cpp's sdk/src/metrics/instrument_metadata_validator.cc.
 // Upstream matches names and units with std::regex, and libstdc++'s matcher
 // recurses once per input character, so a long name overflows a task stack of
