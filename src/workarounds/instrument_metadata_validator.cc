@@ -29,20 +29,26 @@ namespace
 constexpr std::size_t kMaxNameSize = 255;
 constexpr std::size_t kMaxUnitSize = 63;
 
-// std::isalpha is locale-dependent; the specification's ALPHA is ASCII only.
-bool IsAsciiLetter(unsigned char c)
-{
-  return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
-}
-
-bool IsAsciiDigit(unsigned char c)
+// Not <cctype>: its results depend on the global locale, and the
+// specification's ALPHA and DIGIT are ASCII only.
+constexpr bool IsAsciiDigit(char c)
 {
   return c >= '0' && c <= '9';
 }
 
-bool IsNameChar(unsigned char c)
+constexpr bool IsAsciiAlpha(char c)
 {
-  return IsAsciiLetter(c) || IsAsciiDigit(c) || c == '_' || c == '.' || c == '-' || c == '/';
+  return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+}
+
+constexpr bool IsAsciiAlnum(char c)
+{
+  return IsAsciiAlpha(c) || IsAsciiDigit(c);
+}
+
+bool IsNameChar(char c)
+{
+  return IsAsciiAlnum(c) || c == '_' || c == '.' || c == '-' || c == '/';
 }
 
 bool IsUnitChar(unsigned char c)
@@ -58,13 +64,13 @@ InstrumentMetaDataValidator::InstrumentMetaDataValidator() = default;
 bool InstrumentMetaDataValidator::ValidateName(nostd::string_view name) const
 {
   if (name.empty() || name.size() > kMaxNameSize ||
-      !IsAsciiLetter(static_cast<unsigned char>(name[0])))
+      !IsAsciiAlpha(name[0]))
   {
     return false;
   }
   for (std::size_t i = 1; i < name.size(); ++i)
   {
-    if (!IsNameChar(static_cast<unsigned char>(name[i])))
+    if (!IsNameChar(name[i]))
     {
       return false;
     }
